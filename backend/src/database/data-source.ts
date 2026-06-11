@@ -10,7 +10,9 @@ export const dataSourceOptions: DataSourceOptions = {
   migrationsTransactionMode: 'each',
   synchronize: false,
   logging: env.DATABASE_LOGGING,
-  ssl: { rejectUnauthorized: false },
+  ssl: env.NODE_ENV === 'production'
+    ? true
+    : { rejectUnauthorized: false },
 };
 
 const dataSource = new DataSource(dataSourceOptions);
