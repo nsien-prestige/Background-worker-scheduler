@@ -19,9 +19,14 @@ export abstract class AbstractModelAction<T extends { id: string }> {
   }
 
   async update(id: string, data: DeepPartial<T>): Promise<T | null> {
-    await this.repository.update(id, data as any);
-    return this.findById(id);
+  const entity = await this.findById(id);
+  if (!entity) {
+    return null;
   }
+  
+  Object.assign(entity, data);
+  return this.repository.save(entity);
+}
 
   async delete(id: string): Promise<void> {
     await this.repository.delete(id);
