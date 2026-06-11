@@ -8,22 +8,22 @@ export class JobsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  createJob(@Body() dto: CreateJobDto) {
-    return this.jobsService.createJob(dto);
-  }
+    createJob(@Body() dto: CreateJobDto) {
+      return this.jobsService.createJob(dto);
+    }
 
   @Get()
-  findAll() {
-    return this.jobsService.findAll();
-  }
+    findAll() {
+      return this.jobsService.findAll();
+    }
 
   @Patch(':id/cancel')
-  cancelJob(@Param('id', ParseUUIDPipe) id: string) {
-    return this.jobsService.cancelJob(id);
-  }
+    cancelJob(@Param('id', ParseUUIDPipe) id: string) {
+      return this.jobsService.cancelJob(id);
+    }
 
   @Post(':id/retry')
     retryJob(@Param('id', ParseUUIDPipe) id: string) {
       return this.jobsService.retryJob(id);
-  }
+    }
 }

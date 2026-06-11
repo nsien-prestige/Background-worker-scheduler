@@ -7,6 +7,8 @@ import {
   IsIn,
   IsDateString,
 } from 'class-validator';
+import { JobPriority } from '../enums/job-priority.enum';
+import { RECURRING_INTERVALS } from '../enums/recurring-intervals.enum';
 
 export class CreateJobDto {
   @IsString()
@@ -19,7 +21,7 @@ export class CreateJobDto {
 
   @IsNotEmpty()
   @IsInt()
-  @IsIn([1, 2, 3])
+  @IsIn(Object.values(JobPriority))
   priority: number;
 
   @IsOptional()
@@ -28,6 +30,6 @@ export class CreateJobDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['every_1_minute', 'every_5_minutes', 'every_1_hour'])
+  @IsIn(RECURRING_INTERVALS)
   recurring_interval?: string;
 }
