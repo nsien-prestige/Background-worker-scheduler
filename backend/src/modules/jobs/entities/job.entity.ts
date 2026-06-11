@@ -19,7 +19,7 @@ export class Job {
   @Column({ type: 'jsonb' })
   payload: Record<string, any>;
 
-  @Column({ type: 'int', default: JobPriority.MEDIUM })
+  @Column({ type: 'int', default: JobPriority.LOW })
   priority: number;
 
   @Column({
