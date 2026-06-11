@@ -1,8 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { JobModelAction } from './actions/job.action';
 import { CreateJobDto } from './dto/create-job.dto';
 import { Job } from './entities/job.entity';
-import { JobStatus } from './enums/job-status.enum';
 
 @Injectable()
 export class JobsService {
@@ -24,58 +23,33 @@ export class JobsService {
     return this.jobAction.findAll();
   }
 
-  /** Cancels a job — valid for pending and processing jobs only */
+  /** Atomically cancels a job if eligible */
   async cancelJob(id: string): Promise<Job> {
-    const job = await this.jobAction.findById(id);
-    if (!job) {
-      throw new NotFoundException(`Job ${id} not found`);
-    }
-
-    const nonCancellableStatuses = [
-      JobStatus.COMPLETED,
-      JobStatus.FAILED,
-      JobStatus.CANCELLED,
-    ];
-    if (nonCancellableStatuses.includes(job.status)) {
+    const cancelled = await this.jobAction.cancelIfEligible(id);
+    if (!cancelled) {
+      const job = await this.jobAction.findById(id);
+      if (!job) {
+        throw new NotFoundException(`Job ${id} not found`);
+      }
       throw new BadRequestException(
         `Job cannot be cancelled — current status is ${job.status}`,
       );
     }
-
-    const updatedJob = await this.jobAction.update(id, {
-      status: JobStatus.CANCELLED,
-    });
-    if (!updatedJob) {
-      throw new NotFoundException(`Job ${id} not found`);
-    }
-
-    return updatedJob;
+    return cancelled;
   }
 
-  /** Retries a failed job from the DLQ */
+  /** Atomically retries a failed job from the DLQ */
   async retryJob(id: string): Promise<Job> {
-    const job = await this.jobAction.findById(id);
-    if (!job) {
-      throw new NotFoundException(`Job ${id} not found`);
-    }
-    if (job.status !== JobStatus.FAILED) {
+    const retried = await this.jobAction.retryIfFailed(id);
+    if (!retried) {
+      const job = await this.jobAction.findById(id);
+      if (!job) {
+        throw new NotFoundException(`Job ${id} not found`);
+      }
       throw new BadRequestException(
         `Job cannot be retried — current status is ${job.status}`,
       );
     }
-
-    const updated = await this.jobAction.update(id, {
-      status: JobStatus.PENDING,
-      retry_count: 0,
-      error_message: null,
-      started_at: null,
-      locked_by: null,
-      locked_at: null,
-    });
-    if (!updated) {
-      throw new NotFoundException(`Job ${id} not found`);
-    }
-
-    return updated;
+    return retried;
   }
 }
