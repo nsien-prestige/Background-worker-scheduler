@@ -51,4 +51,31 @@ export class JobsService {
 
     return updatedJob;
   }
+
+  /** Retries a failed job from the DLQ */
+  async retryJob(id: string): Promise<Job> {
+    const job = await this.jobAction.findById(id);
+    if (!job) {
+        throw new NotFoundException(`Job ${id} not found`);
+    }
+    if (job.status !== JobStatus.FAILED) {
+        throw new BadRequestException(
+        `Job cannot be retried — current status is ${job.status}`,
+        );
+    }
+
+    const updated = await this.jobAction.update(id, {
+        status: JobStatus.PENDING,
+        retry_count: 0,
+        error_message: null,
+        started_at: null,
+        locked_by: null,
+        locked_at: null,
+    });
+    if (!updated) {
+        throw new NotFoundException(`Job ${id} not found`);
+    }
+
+    return updated;
+  }
 }

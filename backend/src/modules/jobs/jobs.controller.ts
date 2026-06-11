@@ -21,4 +21,9 @@ export class JobsController {
   cancelJob(@Param('id', ParseUUIDPipe) id: string) {
     return this.jobsService.cancelJob(id);
   }
+
+  @Post(':id/retry')
+    retryJob(@Param('id', ParseUUIDPipe) id: string) {
+      return this.jobsService.retryJob(id);
+  }
 }
