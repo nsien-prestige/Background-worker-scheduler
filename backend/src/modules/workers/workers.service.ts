@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job } from '../jobs/entities/job.entity';
@@ -11,8 +11,10 @@ const LOCK_TIMEOUT_MINUTES = 5;
 const WORKER_ID = `worker-${process.pid}`;
 
 @Injectable()
-export class WorkerService implements OnModuleInit {
+export class WorkerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WorkerService.name);
+  private pollingInterval?: NodeJS.Timeout;
+  private watchdogInterval?: NodeJS.Timeout;
 
   constructor(
     @InjectRepository(Job)
@@ -26,16 +28,19 @@ export class WorkerService implements OnModuleInit {
     this.startWatchdog();
   }
 
-  /** Main polling loop — runs every 5 seconds */
+  onModuleDestroy(): void {
+    if (this.pollingInterval) clearInterval(this.pollingInterval);
+    if (this.watchdogInterval) clearInterval(this.watchdogInterval);
+  }
+
   private startPolling(): void {
-    setInterval(async () => {
+    this.pollingInterval = setInterval(async () => {
       await this.processNextJob();
     }, POLL_INTERVAL_MS);
   }
 
-  /** Watchdog — resets stale locked jobs every minute */
   private startWatchdog(): void {
-    setInterval(async () => {
+    this.watchdogInterval = setInterval(async () => {
       await this.resetStaleJobs();
     }, 60_000);
   }
@@ -44,7 +49,6 @@ export class WorkerService implements OnModuleInit {
     const next = this.schedulerService.getNextJob();
     if (!next) return;
 
-    // Atomically lock the job
     const locked = await this.lockJob(next.id);
     if (!locked) return;
 
@@ -61,7 +65,6 @@ export class WorkerService implements OnModuleInit {
     }
   }
 
-  /** Atomically locks a job — returns null if another worker got it first */
   private async lockJob(id: string): Promise<Job | null> {
     const result = await this.jobRepository
       .createQueryBuilder()
@@ -98,7 +101,6 @@ export class WorkerService implements OnModuleInit {
     });
   }
 
-  /** Resets jobs stuck in processing for more than 5 minutes */
   private async resetStaleJobs(): Promise<void> {
     const staleTime = new Date(
       Date.now() - LOCK_TIMEOUT_MINUTES * 60 * 1000,
@@ -115,10 +117,15 @@ export class WorkerService implements OnModuleInit {
       })
       .where('status = :status', { status: JobStatus.PROCESSING })
       .andWhere('locked_at < :staleTime', { staleTime })
+      .returning('*')
       .execute();
 
     if (result.affected && result.affected > 0) {
       this.logger.warn(`Reset ${result.affected} stale jobs back to pending`);
+      const resetJobs = result.raw as Job[];
+      for (const job of resetJobs) {
+        this.schedulerService.addJob(job);
+      }
     }
   }
 
