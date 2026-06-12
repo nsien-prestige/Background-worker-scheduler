@@ -37,24 +37,28 @@ export class RetryService {
     job: Job,
     retryCount: number,
     errorMessage: string,
-  ): Promise<void> {
+    ): Promise<void> {
     const delay = this.calculateDelay(retryCount);
     const retryAt = new Date(Date.now() + delay);
 
     await this.retryJobAction.scheduleRetry(
-      job.id,
-      retryCount,
-      errorMessage,
-      retryAt,
+        job.id,
+        retryCount,
+        errorMessage,
+        retryAt,
     );
 
     const updated = await this.retryJobAction.findForHeap(job.id);
-    if (updated) {
-      this.schedulerService.addJob(updated);
+    if (!updated) {
+        this.logger.warn(
+        `Job ${job.id} not found after scheduling retry — may have been deleted`,
+        );
+        return;
     }
 
+    this.schedulerService.addJob(updated);
     this.logger.log(
-      `Job ${job.id} scheduled for retry ${retryCount}/${MAX_RETRIES} in ${delay}ms`,
+        `Job ${job.id} scheduled for retry ${retryCount}/${MAX_RETRIES} in ${delay}ms`,
     );
   }
 
