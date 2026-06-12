@@ -1,15 +1,12 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { Job } from '../jobs/entities/job.entity';
-import { JobStatus } from '../jobs/enums/job-status.enum';
 import { SchedulerService } from './scheduler/scheduler.service';
 import { EmailHandler } from './handlers/email.handler';
 import { RetryService } from './retry.service';
+import { WorkerJobAction } from './actions/worker-job.action';
 
 const POLL_INTERVAL_MS = 5000;
 const LOCK_TIMEOUT_MINUTES = 5;
-const WORKER_ID = `worker-${process.pid}`;
 
 @Injectable()
 export class WorkerService implements OnModuleInit, OnModuleDestroy {
@@ -18,8 +15,7 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
   private watchdogInterval?: NodeJS.Timeout;
 
   constructor(
-    @InjectRepository(Job)
-    private readonly jobRepository: Repository<Job>,
+    private readonly workerJobAction: WorkerJobAction,
     private readonly schedulerService: SchedulerService,
     private readonly emailHandler: EmailHandler,
     private readonly retryService: RetryService,
@@ -51,15 +47,14 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
     const next = this.schedulerService.getNextJob();
     if (!next) return;
 
-    const locked = await this.lockJob(next.id);
+    const locked = await this.workerJobAction.lockJob(next.id);
     if (!locked) return;
 
     this.logger.log(`Processing job ${locked.id} type=${locked.type}`);
 
     try {
       await this.runHandler(locked);
-      await this.completeJob(locked.id);
-      this.logger.log(`Job ${locked.id} completed`);
+      await this.completeJob(locked);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Job ${locked.id} failed: ${message}`);
@@ -67,31 +62,36 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async lockJob(id: string): Promise<Job | null> {
-    const result = await this.jobRepository
-      .createQueryBuilder()
-      .update(Job)
-      .set({
-        status: JobStatus.PROCESSING,
-        locked_by: WORKER_ID,
-        locked_at: new Date(),
-        started_at: new Date(),
-      })
-      .where('id = :id', { id })
-      .andWhere('status = :status', { status: JobStatus.PENDING })
-      .returning('*')
-      .execute();
+  private async completeJob(job: Job): Promise<void> {
+    await this.workerJobAction.completeJob(job.id);
+    this.logger.log(`Job ${job.id} completed`);
 
-    return result.raw[0] || null;
+    if (job.recurring_interval) {
+      await this.scheduleNextRecurrence(job);
+    }
   }
 
-  private async completeJob(id: string): Promise<void> {
-    await this.jobRepository.update(id, {
-      status: JobStatus.COMPLETED,
-      completed_at: new Date(),
-      locked_by: null,
-      locked_at: null,
-    });
+  private async scheduleNextRecurrence(job: Job): Promise<void> {
+    const nextRun = this.calculateNextRun(job.recurring_interval!);
+    const newJob = await this.workerJobAction.createRecurringJob(job, nextRun);
+    this.schedulerService.addJob(newJob);
+    this.logger.log(
+      `Recurring job ${job.id} completed — next run at ${nextRun.toISOString()}`,
+    );
+  }
+
+  private calculateNextRun(interval: string): Date {
+    const now = new Date();
+    switch (interval) {
+      case 'every_1_minute':
+        return new Date(now.getTime() + 60_000);
+      case 'every_5_minutes':
+        return new Date(now.getTime() + 5 * 60_000);
+      case 'every_1_hour':
+        return new Date(now.getTime() + 60 * 60_000);
+      default:
+        throw new Error(`Unknown recurring interval: ${interval}`);
+    }
   }
 
   private async resetStaleJobs(): Promise<void> {
@@ -99,23 +99,10 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
       Date.now() - LOCK_TIMEOUT_MINUTES * 60 * 1000,
     );
 
-    const result = await this.jobRepository
-      .createQueryBuilder()
-      .update(Job)
-      .set({
-        status: JobStatus.PENDING,
-        locked_by: null,
-        locked_at: null,
-        started_at: null,
-      })
-      .where('status = :status', { status: JobStatus.PROCESSING })
-      .andWhere('locked_at < :staleTime', { staleTime })
-      .returning('*')
-      .execute();
+    const resetJobs = await this.workerJobAction.resetStaleJobs(staleTime);
 
-    if (result.affected && result.affected > 0) {
-      this.logger.warn(`Reset ${result.affected} stale jobs back to pending`);
-      const resetJobs = result.raw as Job[];
+    if (resetJobs.length > 0) {
+      this.logger.warn(`Reset ${resetJobs.length} stale jobs back to pending`);
       for (const job of resetJobs) {
         this.schedulerService.addJob(job);
       }
