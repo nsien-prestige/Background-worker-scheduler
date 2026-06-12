@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { AbstractModelAction } from '../../../database/abstract.action';
 import { Job } from '../entities/job.entity';
 import { JobStatus } from '../enums/job-status.enum';
+import { JobStats } from '../interfaces/job-stats.interface';
 
 @Injectable()
 export class JobModelAction extends AbstractModelAction<Job> {
@@ -60,14 +61,46 @@ export class JobModelAction extends AbstractModelAction<Job> {
     });
   }
 
-  async findAllPaginated(page: number, limit: number): Promise<{ data: Job[]; total: number }> {
+  async findAllPaginated(
+    page: number,
+    limit: number,
+  ): Promise<{ data: Job[]; total: number }> {
     return this.findPaginated(page, limit, { order: { created_at: 'DESC' } });
   }
 
-  async findDLQPaginated(page: number, limit: number): Promise<{ data: Job[]; total: number }> {
+  async findDLQPaginated(
+    page: number,
+    limit: number,
+  ): Promise<{ data: Job[]; total: number }> {
     return this.findPaginated(page, limit, {
       where: { is_dlq: true, status: JobStatus.FAILED },
       order: { updated_at: 'DESC' },
     });
+  }
+
+  async getStats(): Promise<JobStats> {
+    const rows = await this.repository
+      .createQueryBuilder('job')
+      .select('job.status', 'status')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('job.status')
+      .getRawMany<{ status: JobStatus; count: string }>();
+
+    const stats: JobStats = {
+      pending: 0,
+      processing: 0,
+      completed: 0,
+      failed: 0,
+      cancelled: 0,
+      total: 0,
+    };
+
+    rows.forEach(({ status, count }) => {
+      const value = Number(count);
+      stats[status] = value;
+      stats.total += value;
+    });
+
+    return stats;
   }
 }
