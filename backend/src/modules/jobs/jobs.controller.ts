@@ -17,6 +17,11 @@ export class JobsController {
       return this.jobsService.findAll();
     }
 
+  @Get('dlq')
+    findDLQ() {
+      return this.jobsService.findDLQ();
+    }
+
   @Patch(':id/cancel')
     cancelJob(@Param('id', ParseUUIDPipe) id: string) {
       return this.jobsService.cancelJob(id);
