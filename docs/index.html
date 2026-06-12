@@ -307,6 +307,48 @@
     overflow: hidden;
   }
 
+  .pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-3);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .pagination-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .page-btn {
+    padding: 7px 12px;
+    background: var(--surface-3);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    color: var(--text-2);
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .page-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .page-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
   table {
     width: 100%;
     border-collapse: collapse;
@@ -827,6 +869,8 @@
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
     table { font-size: 12px; }
     td, th { padding: 10px 12px; }
+    .pagination { flex-direction: column; align-items: stretch; }
+    .pagination-actions { justify-content: space-between; }
   }
 </style>
 </head>
@@ -913,6 +957,7 @@
       </div>
       <div class="table-wrap">
         <div id="jobsTable"><div class="loading"><div class="spinner"></div> Loading jobs...</div></div>
+        <div id="jobsPagination"></div>
       </div>
     </div>
 
@@ -975,7 +1020,10 @@
         <div class="section-title">Dead Letter Queue <span class="count" id="dlqCount">0</span></div>
         <div style="font-size:12px;color:var(--text-3);font-family:var(--font-mono);">Threshold: 10 jobs</div>
       </div>
-      <div id="dlqList"><div class="loading"><div class="spinner"></div> Loading DLQ...</div></div>
+      <div class="table-wrap">
+        <div id="dlqList"><div class="loading"><div class="spinner"></div> Loading DLQ...</div></div>
+        <div id="dlqPagination"></div>
+      </div>
     </div>
 
     <!-- Benchmark Panel -->
@@ -1022,7 +1070,12 @@
 
 <script>
 const API = 'https://prestige-scheduler.duckdns.org';
+const PAGE_LIMIT = 20;
 let allJobs = [];
+let jobsPage = 1;
+let jobsMeta = null;
+let dlqPage = 1;
+let dlqMeta = null;
 let sseSource = null;
 
 // ── Utilities ──────────────────────────────────────
@@ -1056,14 +1109,14 @@ function statusBadge(status) {
 }
 
 // ── API calls ──────────────────────────────────────
-async function fetchJobs() {
-  const res = await fetch(`${API}/jobs`);
+async function fetchJobs(page = 1) {
+  const res = await fetch(`${API}/jobs?page=${page}&limit=${PAGE_LIMIT}`);
   if (!res.ok) throw new Error('Failed to fetch jobs');
   return res.json();
 }
 
-async function fetchDLQ() {
-  const res = await fetch(`${API}/jobs/dlq`);
+async function fetchDLQ(page = 1) {
+  const res = await fetch(`${API}/jobs/dlq?page=${page}&limit=${PAGE_LIMIT}`);
   if (!res.ok) throw new Error('Failed to fetch DLQ');
   return res.json();
 }
@@ -1116,10 +1169,29 @@ function renderJobsTable(jobs, containerId, showActions = true) {
   `;
 }
 
+function renderPagination(containerId, meta, onPageChange) {
+  const container = document.getElementById(containerId);
+  if (!container || !meta) return;
+
+  const totalPages = Math.max(meta.totalPages || 1, 1);
+  const start = meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1;
+  const end = Math.min(meta.page * meta.limit, meta.total);
+
+  container.innerHTML = `
+    <div class="pagination">
+      <span>${start}-${end} of ${meta.total} · Page ${meta.page} of ${totalPages}</span>
+      <div class="pagination-actions">
+        <button class="page-btn" ${meta.page <= 1 ? 'disabled' : ''} onclick="${onPageChange}(${meta.page - 1})">← Previous</button>
+        <button class="page-btn" ${meta.page >= totalPages ? 'disabled' : ''} onclick="${onPageChange}(${meta.page + 1})">Next →</button>
+      </div>
+    </div>
+  `;
+}
+
 // ── DLQ ────────────────────────────────────────────
-function renderDLQ(jobs) {
+function renderDLQ(jobs, meta) {
   const container = document.getElementById('dlqList');
-  document.getElementById('dlqCount').textContent = jobs.length;
+  document.getElementById('dlqCount').textContent = meta?.total ?? jobs.length;
 
   if (!jobs.length) {
     container.innerHTML = `<div class="empty-state"><div class="icon">✨</div><p>Dead letter queue is empty</p></div>`;
@@ -1168,7 +1240,7 @@ async function cancelJob(id) {
       throw new Error(err.message);
     }
     showToast('Job cancelled successfully', 'success');
-    await refreshAll();
+    await refreshAll({ keepPage: true });
   } catch (e) {
     showToast(e.message || 'Failed to cancel job', 'error');
   }
@@ -1182,7 +1254,7 @@ async function retryJob(id) {
       throw new Error(err.message);
     }
     showToast('Job re-queued for retry', 'success');
-    await refreshAll();
+    await refreshAll({ keepPage: true });
   } catch (e) {
     showToast(e.message || 'Failed to retry job', 'error');
   }
@@ -1249,8 +1321,18 @@ document.addEventListener('DOMContentLoaded', () => {
 function filterJobs() {
   const filter = document.getElementById('statusFilter').value;
   const filtered = filter ? allJobs.filter(j => j.status === filter) : allJobs;
-  document.getElementById('allJobsCount').textContent = filtered.length;
+  document.getElementById('allJobsCount').textContent = filter ? filtered.length : (jobsMeta?.total ?? filtered.length);
   renderJobsTable(filtered, 'jobsTable');
+}
+
+async function changeJobsPage(page) {
+  jobsPage = page;
+  await refreshAll({ keepPage: true });
+}
+
+async function changeDLQPage(page) {
+  dlqPage = page;
+  await refreshAll({ keepPage: true });
 }
 
 // ── Benchmark ──────────────────────────────────────
@@ -1298,7 +1380,7 @@ function connectSSE() {
 
     sseSource.onmessage = async (e) => {
       try {
-        await refreshAll();
+        await refreshAll({ keepPage: true });
       } catch (_) {}
     };
 
@@ -1306,18 +1388,31 @@ function connectSSE() {
       document.getElementById('sseDot').classList.remove('connected');
       document.getElementById('sseStatus').textContent = 'SSE';
       // Fallback to polling every 5s if SSE not available
-      setTimeout(refreshAll, 5000);
+      setTimeout(() => refreshAll({ keepPage: true }), 5000);
     };
   } catch (_) {
     // SSE not available, polling fallback
-    setInterval(refreshAll, 5000);
+    setInterval(() => refreshAll({ keepPage: true }), 5000);
   }
 }
 
 // ── Refresh ────────────────────────────────────────
-async function refreshAll() {
+async function refreshAll(options = {}) {
   try {
-    const [jobs, dlq] = await Promise.all([fetchJobs(), fetchDLQ()]);
+    if (!options.keepPage) {
+      jobsPage = 1;
+      dlqPage = 1;
+    }
+
+    const [jobsResult, dlqResult] = await Promise.all([
+      fetchJobs(jobsPage),
+      fetchDLQ(dlqPage),
+    ]);
+    const jobs = jobsResult.data || [];
+    const dlq = dlqResult.data || [];
+
+    jobsMeta = jobsResult.meta;
+    dlqMeta = dlqResult.meta;
     allJobs = jobs;
 
     updateStats(jobs);
@@ -1330,11 +1425,13 @@ async function refreshAll() {
     // Jobs tab
     const filter = document.getElementById('statusFilter').value;
     const filtered = filter ? jobs.filter(j => j.status === filter) : jobs;
-    document.getElementById('allJobsCount').textContent = filtered.length;
+    document.getElementById('allJobsCount').textContent = filter ? filtered.length : (jobsMeta?.total ?? filtered.length);
     renderJobsTable(filtered, 'jobsTable');
+    renderPagination('jobsPagination', jobsMeta, 'changeJobsPage');
 
     // DLQ
-    renderDLQ(dlq);
+    renderDLQ(dlq, dlqMeta);
+    renderPagination('dlqPagination', dlqMeta, 'changeDLQPage');
   } catch (e) {
     showToast('Failed to fetch data from server', 'error');
   }
@@ -1352,7 +1449,7 @@ function switchTab(name, el) {
 refreshAll();
 connectSSE();
 // Polling fallback every 8 seconds regardless
-setInterval(refreshAll, 8000);
+setInterval(() => refreshAll({ keepPage: true }), 8000);
 </script>
 </body>
 </html>
