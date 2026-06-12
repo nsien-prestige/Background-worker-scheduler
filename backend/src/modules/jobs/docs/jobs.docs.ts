@@ -32,6 +32,23 @@ export const FindAllJobsDocs = () =>
     ApiOkResponse({ type: PaginatedJobsResponseDto }),
   );
 
+export const GetJobStatsDocs = () =>
+  applyDecorators(
+    ApiOperation({ summary: 'Get job totals grouped by status' }),
+    ApiOkResponse({
+      schema: {
+        example: {
+          pending: 10,
+          processing: 2,
+          completed: 1400,
+          failed: 8,
+          cancelled: 3,
+          total: 1423,
+        },
+      },
+    }),
+  );
+
 export const FindDLQDocs = () =>
   applyDecorators(
     ApiOperation({ summary: 'Get jobs in the dead letter queue' }),
