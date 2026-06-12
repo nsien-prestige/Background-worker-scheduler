@@ -1,10 +1,15 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { JobModelAction } from './actions/job.action';
 import { CreateJobDto } from './dto/create-job.dto';
 import { Job } from './entities/job.entity';
 import { SchedulerService } from '../workers/scheduler/scheduler.service';
 import { DagService } from './dag.service';
 import { SchedulerBenchmarkService } from '../workers/scheduler/benchmark/scheduler-benchmark.service';
+import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 
 @Injectable()
 export class JobsService {
@@ -29,9 +34,13 @@ export class JobsService {
     return job;
   }
 
-  /** Retrieves all jobs */
-  async findAll(): Promise<Job[]> {
-    return this.jobAction.findAll();
+  /** Retrieves all jobs with pagination */
+  async findAll(page: number, limit: number): Promise<PaginatedResult<Job>> {
+    const { data, total } = await this.jobAction.findAllPaginated(page, limit);
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   /** Atomically cancels a job if eligible */
@@ -66,9 +75,13 @@ export class JobsService {
     return retried;
   }
 
-  /** Retrieves all jobs in the DLQ */
-  async findDLQ(): Promise<Job[]> {
-    return this.jobAction.findDLQ();
+  /** Retrieves all jobs in the DLQ with pagination */
+  async findDLQ(page: number, limit: number): Promise<PaginatedResult<Job>> {
+    const { data, total } = await this.jobAction.findDLQPaginated(page, limit);
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   async addDependency(jobId: string, dependsOnId: string): Promise<void> {
