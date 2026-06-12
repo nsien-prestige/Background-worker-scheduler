@@ -49,17 +49,28 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
     const next = this.schedulerService.getNextJob();
     if (!next) return;
 
-    // Check dependencies before locking
-    const depsMet = await this.dagService.areDependenciesMet(next.id);
-    if (!depsMet) {
-        this.logger.log(
-        `Job ${next.id} skipped — dependencies not yet completed`,
-        );
+    const locked = await this.workerJobAction.lockJob(next.id);
+    if (!locked) return;
+
+    // Check dependencies AFTER locking to prevent TOCTOU
+    let depsMet: boolean;
+    try {
+        depsMet = await this.dagService.areDependenciesMet(locked.id);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(`Failed to check dependencies for job ${locked.id}: ${message}`);
+        await this.workerJobAction.unlockJob(locked.id);
+        
         return;
     }
 
-    const locked = await this.workerJobAction.lockJob(next.id);
-    if (!locked) return;
+    if (!depsMet) {
+        this.logger.log(
+        `Job ${locked.id} skipped — dependencies not yet completed`,
+        );
+        await this.workerJobAction.unlockJob(locked.id);
+        return;
+    }
 
     this.logger.log(`Processing job ${locked.id} type=${locked.type}`);
 

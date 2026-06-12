@@ -76,4 +76,13 @@ export class WorkerJobAction extends AbstractModelAction<Job> {
 
     return result.raw as Job[];
   }
+
+  async unlockJob(id: string): Promise<void> {
+    await this.repository.update(id, {
+      status: JobStatus.PENDING,
+      locked_by: null,
+      locked_at: null,
+      started_at: null,
+    });
+  }
 }
