@@ -32,6 +32,15 @@ export class Job {
   @Column({ type: 'int', default: 0 })
   retry_count: number;
 
+  @Column({ type: 'boolean', default: false })
+  is_dlq: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  dlq_reason: string | null;
+
+  @Column({ type: 'int', default: 0 })
+  dlq_retry_count: number;
+
   @Column({ type: 'text', nullable: true })
   error_message: string | null;
 
