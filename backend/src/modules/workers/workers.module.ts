@@ -7,11 +7,13 @@ import { SchedulerModule } from './scheduler/scheduler.module';
 import { RetryService } from './retry.service';
 import { RetryJobAction } from './actions/retry-job.action';
 import { WorkerJobAction } from './actions/worker-job.action';
+import { JobsModule } from '../jobs/jobs.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Job]),
     SchedulerModule,
+    JobsModule,
   ],
   providers: [
     WorkerService, 
