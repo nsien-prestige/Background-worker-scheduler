@@ -4,6 +4,7 @@ import { CreateJobDto } from './dto/create-job.dto';
 import { Job } from './entities/job.entity';
 import { SchedulerService } from '../workers/scheduler/scheduler.service';
 import { DagService } from './dag.service';
+import { SchedulerBenchmarkService } from '../workers/scheduler/benchmark/scheduler-benchmark.service';
 
 @Injectable()
 export class JobsService {
@@ -11,6 +12,7 @@ export class JobsService {
     private readonly jobAction: JobModelAction,
     private readonly schedulerService: SchedulerService,
     private readonly dagService: DagService,
+    private readonly benchmarkService: SchedulerBenchmarkService,
   ) {}
 
   /** Creates a new job and adds it to the heap */
@@ -71,5 +73,9 @@ export class JobsService {
 
   async addDependency(jobId: string, dependsOnId: string): Promise<void> {
     await this.dagService.addDependency(jobId, dependsOnId);
+  }
+
+  runBenchmark(jobCount: number) {
+    return this.benchmarkService.runBenchmark(jobCount);
   }
 }
