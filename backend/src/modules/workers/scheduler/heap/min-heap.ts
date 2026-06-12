@@ -84,11 +84,15 @@ export class MinHeap {
     const index = this.heap.findIndex(j => j.id === jobId);
     if (index === -1) return;
 
-    this.heap[index] = this.heap.pop()!;
-    if (index < this.heap.length) {
-      this.bubbleUp(index);
-      this.bubbleDown(index);
+    // If removing the last element just pop it
+    if (index === this.heap.length - 1) {
+        this.heap.pop();
+        return;
     }
+
+    this.heap[index] = this.heap.pop()!;
+    this.bubbleUp(index);
+    this.bubbleDown(index);
   }
 
   size(): number {
@@ -97,5 +101,9 @@ export class MinHeap {
 
   isEmpty(): boolean {
     return this.heap.length === 0;
+  }
+
+  contains(jobId: string): boolean {
+    return this.heap.some(j => j.id === jobId);
   }
 }
