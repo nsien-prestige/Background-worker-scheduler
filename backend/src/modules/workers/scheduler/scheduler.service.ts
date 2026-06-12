@@ -1,11 +1,12 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, IsNull } from 'typeorm';
 import { Job } from '../../jobs/entities/job.entity';
-import { JobStatus } from '../../jobs/enums/job-status.enum';
 import { MinHeap } from './heap/min-heap';
+import { SchedulerJobAction } from './actions/scheduler-job.action';
 
 const SCHEDULED_JOBS_CHECK_INTERVAL_MS = 10_000;
+const AGING_INTERVAL_MS = 30_000;
+const AGING_THRESHOLD_MS = 60_000;
+const AGING_BOOST = 1;
 
 @Injectable()
 export class SchedulerService implements OnModuleInit {
@@ -13,50 +14,55 @@ export class SchedulerService implements OnModuleInit {
   private readonly heap = new MinHeap();
 
   constructor(
-    @InjectRepository(Job)
-    private readonly jobRepository: Repository<Job>,
+    private readonly schedulerJobAction: SchedulerJobAction,
   ) {}
 
   async onModuleInit(): Promise<void> {
     await this.loadJobsIntoHeap();
     this.logger.log(`Heap initialized with ${this.heap.size()} jobs`);
     this.startScheduledJobsCheck();
+    this.startAgingCheck();
   }
 
   private async loadJobsIntoHeap(): Promise<void> {
-    const jobs = await this.jobRepository.find({
-      where: [
-        { status: JobStatus.PENDING, scheduled_at: IsNull() },
-        {
-          status: JobStatus.PENDING,
-          scheduled_at: LessThanOrEqual(new Date()),
-        },
-      ],
-    });
-
+    const jobs = await this.schedulerJobAction.loadPendingJobs();
     for (const job of jobs) {
       this.heap.insert(job);
     }
   }
 
-  /** Periodically checks for future-scheduled jobs that are now due */
   private startScheduledJobsCheck(): void {
     setInterval(async () => {
-      const dueJobs = await this.jobRepository.find({
-        where: {
-          status: JobStatus.PENDING,
-          scheduled_at: LessThanOrEqual(new Date()),
-        },
-      });
-
+      const dueJobs = await this.schedulerJobAction.findDueJobs();
       for (const job of dueJobs) {
-        // Only add if not already in heap
         if (!this.isInHeap(job.id)) {
           this.heap.insert(job);
           this.logger.log(`Scheduled job ${job.id} is now due — added to heap`);
         }
       }
     }, SCHEDULED_JOBS_CHECK_INTERVAL_MS);
+  }
+
+  private startAgingCheck(): void {
+    setInterval(async () => {
+      await this.applyPriorityAging();
+    }, AGING_INTERVAL_MS);
+  }
+
+  private async applyPriorityAging(): Promise<void> {
+    const staleJobs = await this.schedulerJobAction.findPendingUnscheduled();
+
+    for (const job of staleJobs) {
+      const waitTime = Date.now() - job.created_at.getTime();
+      if (waitTime > AGING_THRESHOLD_MS && job.priority > 1) {
+        this.heap.remove(job.id);
+        job.priority = Math.max(1, job.priority - AGING_BOOST);
+        this.heap.insert(job);
+        this.logger.log(
+          `Priority aging applied to job ${job.id} — new priority: ${job.priority}`,
+        );
+      }
+    }
   }
 
   addJob(job: Job): void {
