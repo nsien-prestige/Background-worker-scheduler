@@ -31,4 +31,12 @@ export class JobsController {
     retryJob(@Param('id', ParseUUIDPipe) id: string) {
       return this.jobsService.retryJob(id);
     }
+
+  @Post(':jobId/dependencies/:dependsOnId')
+    addDependency(
+      @Param('jobId', ParseUUIDPipe) jobId: string,
+      @Param('dependsOnId', ParseUUIDPipe) dependsOnId: string,
+    ) {
+      return this.jobsService.addDependency(jobId, dependsOnId);
+    }
 }

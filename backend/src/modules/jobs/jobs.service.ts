@@ -3,12 +3,14 @@ import { JobModelAction } from './actions/job.action';
 import { CreateJobDto } from './dto/create-job.dto';
 import { Job } from './entities/job.entity';
 import { SchedulerService } from '../workers/scheduler/scheduler.service';
+import { DagService } from './dag.service';
 
 @Injectable()
 export class JobsService {
   constructor(
     private readonly jobAction: JobModelAction,
     private readonly schedulerService: SchedulerService,
+    private readonly dagService: DagService,
   ) {}
 
   /** Creates a new job and adds it to the heap */
@@ -65,5 +67,9 @@ export class JobsService {
   /** Retrieves all jobs in the DLQ */
   async findDLQ(): Promise<Job[]> {
     return this.jobAction.findDLQ();
+  }
+
+  async addDependency(jobId: string, dependsOnId: string): Promise<void> {
+    await this.dagService.addDependency(jobId, dependsOnId);
   }
 }
