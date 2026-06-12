@@ -1071,6 +1071,7 @@
 <script>
 const API = 'https://prestige-scheduler.duckdns.org';
 const PAGE_LIMIT = 20;
+const FILTER_FETCH_LIMIT = 100;
 let allJobs = [];
 let jobsPage = 1;
 let jobsMeta = null;
@@ -1109,10 +1110,27 @@ function statusBadge(status) {
 }
 
 // ── API calls ──────────────────────────────────────
-async function fetchJobs(page = 1) {
-  const res = await fetch(`${API}/jobs?page=${page}&limit=${PAGE_LIMIT}`);
+async function fetchJobs(page = 1, limit = PAGE_LIMIT) {
+  const res = await fetch(`${API}/jobs?page=${page}&limit=${limit}`);
   if (!res.ok) throw new Error('Failed to fetch jobs');
   return res.json();
+}
+
+async function fetchAllJobs() {
+  const firstPage = await fetchJobs(1, FILTER_FETCH_LIMIT);
+  const totalPages = firstPage.meta?.totalPages ?? 1;
+
+  if (totalPages <= 1) {
+    return firstPage.data || [];
+  }
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, i) =>
+      fetchJobs(i + 2, FILTER_FETCH_LIMIT),
+    ),
+  );
+
+  return [firstPage, ...remainingPages].flatMap(result => result.data || []);
 }
 
 async function fetchDLQ(page = 1) {
@@ -1190,6 +1208,15 @@ function renderPagination(containerId, meta, onPageChange) {
       </div>
     </div>
   `;
+}
+
+function buildPaginationMeta(total, page, limit = PAGE_LIMIT) {
+  return {
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+  };
 }
 
 // ── DLQ ────────────────────────────────────────────
@@ -1322,11 +1349,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── Filter ─────────────────────────────────────────
-function filterJobs() {
-  const filter = document.getElementById('statusFilter').value;
-  const filtered = filter ? allJobs.filter(j => j.status === filter) : allJobs;
-  document.getElementById('allJobsCount').textContent = filter ? filtered.length : (jobsMeta?.total ?? filtered.length);
-  renderJobsTable(filtered, 'jobsTable');
+async function filterJobs() {
+  jobsPage = 1;
+  await refreshAll({ keepPage: true });
 }
 
 async function changeJobsPage(page) {
@@ -1408,10 +1433,12 @@ async function refreshAll(options = {}) {
       dlqPage = 1;
     }
 
-    const [jobsResult, dlqResult, stats] = await Promise.all([
+    const filter = document.getElementById('statusFilter').value;
+    const [jobsResult, dlqResult, stats, filteredJobs] = await Promise.all([
       fetchJobs(jobsPage),
       fetchDLQ(dlqPage),
       fetchStats(),
+      filter ? fetchAllJobs() : Promise.resolve(null),
     ]);
     const jobs = jobsResult.data || [];
     const dlq = dlqResult.data || [];
@@ -1428,11 +1455,19 @@ async function refreshAll(options = {}) {
     renderJobsTable(recent, 'dashboardTable');
 
     // Jobs tab
-    const filter = document.getElementById('statusFilter').value;
-    const filtered = filter ? jobs.filter(j => j.status === filter) : jobs;
-    document.getElementById('allJobsCount').textContent = filter ? filtered.length : (jobsMeta?.total ?? filtered.length);
-    renderJobsTable(filtered, 'jobsTable');
-    renderPagination('jobsPagination', jobsMeta, 'changeJobsPage');
+    const jobsForTable = filter
+      ? filteredJobs.filter(j => j.status === filter)
+      : jobs;
+    const filteredMeta = filter
+      ? buildPaginationMeta(jobsForTable.length, jobsPage)
+      : jobsMeta;
+    const visibleJobs = filter
+      ? jobsForTable.slice((jobsPage - 1) * PAGE_LIMIT, jobsPage * PAGE_LIMIT)
+      : jobsForTable;
+
+    document.getElementById('allJobsCount').textContent = filteredMeta?.total ?? visibleJobs.length;
+    renderJobsTable(visibleJobs, 'jobsTable');
+    renderPagination('jobsPagination', filteredMeta, 'changeJobsPage');
 
     // DLQ
     renderDLQ(dlq, dlqMeta);
