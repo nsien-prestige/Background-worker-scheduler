@@ -55,7 +55,7 @@ export class JobModelAction extends AbstractModelAction<Job> {
 
   async findDLQ(): Promise<Job[]> {
     return this.repository.find({
-      where: { is_dlq: true },
+      where: { is_dlq: true, status: JobStatus.FAILED },
       order: { updated_at: 'DESC' },
     });
   }

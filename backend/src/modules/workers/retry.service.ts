@@ -54,15 +54,20 @@ export class RetryService {
       scheduled_at: retryAt,
       locked_by: null,
       locked_at: null,
+      started_at: null,
     });
 
     // Re-add to heap with new scheduled_at
     const updated = await this.jobRepository.findOne({
       where: { id: job.id },
     });
-    if (updated) {
-      this.schedulerService.addJob(updated);
+    if (!updated) {
+      this.logger.error(
+        `Failed to re-fetch job ${job.id} after scheduling retry — job may be lost from scheduler`,
+      );
+      return;
     }
+    this.schedulerService.addJob(updated);
 
     this.logger.log(
       `Job ${job.id} scheduled for retry ${retryCount}/${MAX_RETRIES} in ${delay}ms`,
