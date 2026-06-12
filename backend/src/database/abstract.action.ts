@@ -1,10 +1,23 @@
-import { Repository, FindOptionsWhere, DeepPartial } from 'typeorm';
+import { Repository, FindOptionsWhere, FindManyOptions, DeepPartial } from 'typeorm';
 
 export abstract class AbstractModelAction<T extends { id: string }> {
   constructor(protected readonly repository: Repository<T>) {}
 
   async findAll(): Promise<T[]> {
     return this.repository.find();
+  }
+
+  async findPaginated(
+    page: number,
+    limit: number,
+    options?: FindManyOptions<T>,
+  ): Promise<{ data: T[]; total: number }> {
+    const [data, total] = await this.repository.findAndCount({
+      ...options,
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return { data, total };
   }
 
   async findById(id: string): Promise<T | null> {

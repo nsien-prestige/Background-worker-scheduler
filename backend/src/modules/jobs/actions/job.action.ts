@@ -59,4 +59,15 @@ export class JobModelAction extends AbstractModelAction<Job> {
       order: { updated_at: 'DESC' },
     });
   }
+
+  async findAllPaginated(page: number, limit: number): Promise<{ data: Job[]; total: number }> {
+    return this.findPaginated(page, limit, { order: { created_at: 'DESC' } });
+  }
+
+  async findDLQPaginated(page: number, limit: number): Promise<{ data: Job[]; total: number }> {
+    return this.findPaginated(page, limit, {
+      where: { is_dlq: true, status: JobStatus.FAILED },
+      order: { updated_at: 'DESC' },
+    });
+  }
 }
