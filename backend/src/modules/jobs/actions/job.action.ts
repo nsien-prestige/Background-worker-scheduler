@@ -42,6 +42,8 @@ export class JobModelAction extends AbstractModelAction<Job> {
         started_at: null,
         locked_by: null,
         locked_at: null,
+        is_dlq: false,
+        dlq_reason: null,
       })
       .where('id = :id', { id })
       .andWhere('status = :status', { status: JobStatus.FAILED })
@@ -49,5 +51,12 @@ export class JobModelAction extends AbstractModelAction<Job> {
       .execute();
 
     return result.raw[0] || null;
+  }
+
+  async findDLQ(): Promise<Job[]> {
+    return this.repository.find({
+      where: { is_dlq: true, status: JobStatus.FAILED },
+      order: { updated_at: 'DESC' },
+    });
   }
 }

@@ -61,4 +61,9 @@ export class JobsService {
     this.schedulerService.addJob(retried);
     return retried;
   }
+
+  /** Retrieves all jobs in the DLQ */
+  async findDLQ(): Promise<Job[]> {
+    return this.jobAction.findDLQ();
+  }
 }

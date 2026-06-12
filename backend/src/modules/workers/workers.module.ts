@@ -4,12 +4,13 @@ import { WorkerService } from './workers.service';
 import { EmailHandler } from './handlers/email.handler';
 import { Job } from '../jobs/entities/job.entity';
 import { SchedulerModule } from './scheduler/scheduler.module';
+import { RetryService } from './retry.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Job]),
     SchedulerModule,
   ],
-  providers: [WorkerService, EmailHandler],
+  providers: [WorkerService, RetryService, EmailHandler],
 })
 export class WorkerModule {}
