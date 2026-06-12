@@ -12,12 +12,14 @@ export class EmailHandler {
       throw new Error('Invalid email payload — missing to or subject');
     }
 
-    // Simulate random failure 20% of the time for retry testing
+    if (typeof to !== 'string' || typeof subject !== 'string') {
+      throw new Error('Invalid email payload — to and subject must be strings');
+    }
+
     if (Math.random() < 0.2) {
       throw new Error('Email service temporarily unavailable');
     }
 
-    // Simulate processing time
     await this.sleep(500);
 
     this.logger.log(
