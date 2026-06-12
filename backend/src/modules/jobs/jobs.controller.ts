@@ -19,6 +19,7 @@ import {
   CreateJobDocs,
   FindAllJobsDocs,
   FindDLQDocs,
+  GetJobStatsDocs,
   JobsDocs,
   RetryJobDocs,
   RunBenchmarkDocs,
@@ -43,6 +44,12 @@ export class JobsController {
       pagination.page ?? 1,
       pagination.limit ?? 20,
     );
+  }
+
+  @Get('stats')
+  @GetJobStatsDocs()
+  getStats() {
+    return this.jobsService.getStats();
   }
 
   @Get('dlq')

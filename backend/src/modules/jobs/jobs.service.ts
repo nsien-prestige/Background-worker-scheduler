@@ -10,6 +10,7 @@ import { SchedulerService } from '../workers/scheduler/scheduler.service';
 import { DagService } from './dag.service';
 import { SchedulerBenchmarkService } from '../workers/scheduler/benchmark/scheduler-benchmark.service';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
+import { JobStats } from './interfaces/job-stats.interface';
 
 @Injectable()
 export class JobsService {
@@ -41,6 +42,11 @@ export class JobsService {
       data,
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
+  }
+
+  /** Retrieves job totals grouped by status */
+  async getStats(): Promise<JobStats> {
+    return this.jobAction.getStats();
   }
 
   /** Atomically cancels a job if eligible */
