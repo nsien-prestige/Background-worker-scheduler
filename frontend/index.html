@@ -1,0 +1,1358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scheduler — Job Control Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1219;
+    --surface-2: #121920;
+    --surface-3: #1a2332;
+    --border: rgba(255,255,255,0.06);
+    --border-2: rgba(255,255,255,0.1);
+    --accent: #00d4ff;
+    --accent-dim: rgba(0,212,255,0.12);
+    --accent-glow: rgba(0,212,255,0.25);
+    --green: #00e5a0;
+    --green-dim: rgba(0,229,160,0.12);
+    --yellow: #ffd166;
+    --yellow-dim: rgba(255,209,102,0.12);
+    --red: #ff4d6d;
+    --red-dim: rgba(255,77,109,0.12);
+    --orange: #ff8c42;
+    --orange-dim: rgba(255,140,66,0.12);
+    --purple: #b388ff;
+    --purple-dim: rgba(179,136,255,0.12);
+    --text: #e8edf2;
+    --text-2: #8a9bb0;
+    --text-3: #4a5a6e;
+    --font-display: 'Syne', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-display);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Ambient glow */
+  body::after {
+    content: '';
+    position: fixed;
+    top: -20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 400px;
+    background: radial-gradient(ellipse, rgba(0,212,255,0.06) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(8,12,16,0.8);
+    backdrop-filter: blur(20px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    font-size: 16px;
+  }
+
+  .logo-text {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    color: var(--text);
+  }
+
+  .logo-text span {
+    color: var(--accent);
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .status-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background: var(--green-dim);
+    border: 1px solid rgba(0,229,160,0.2);
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--green);
+    font-family: var(--font-mono);
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,229,160,0.4); }
+    50% { opacity: 0.8; box-shadow: 0 0 0 4px rgba(0,229,160,0); }
+  }
+
+  .refresh-btn {
+    padding: 8px 16px;
+    background: var(--surface-3);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    color: var(--text-2);
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .refresh-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  /* ── Nav Tabs ── */
+  .nav-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 16px 32px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tab {
+    padding: 10px 20px;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-3);
+    transition: all 0.2s;
+    border: 1px solid transparent;
+    border-bottom: none;
+    position: relative;
+    bottom: -1px;
+  }
+
+  .tab:hover { color: var(--text-2); background: var(--surface-2); }
+
+  .tab.active {
+    color: var(--accent);
+    background: var(--surface);
+    border-color: var(--border);
+    border-bottom-color: var(--surface);
+  }
+
+  /* ── Main Content ── */
+  .content {
+    padding: 32px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ── Stats Grid ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+  }
+
+  .stat-card.pending::before { background: var(--yellow); }
+  .stat-card.processing::before { background: var(--accent); }
+  .stat-card.completed::before { background: var(--green); }
+  .stat-card.failed::before { background: var(--red); }
+  .stat-card.cancelled::before { background: var(--text-3); }
+
+  .stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 12px;
+    font-family: var(--font-mono);
+  }
+
+  .stat-value {
+    font-size: 36px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -1px;
+  }
+
+  .stat-card.pending .stat-value { color: var(--yellow); }
+  .stat-card.processing .stat-value { color: var(--accent); }
+  .stat-card.completed .stat-value { color: var(--green); }
+  .stat-card.failed .stat-value { color: var(--red); }
+  .stat-card.cancelled .stat-value { color: var(--text-3); }
+
+  /* ── Section Header ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .section-title {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-title .count {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 2px 8px;
+    background: var(--surface-3);
+    border-radius: 20px;
+    color: var(--text-2);
+    font-weight: 500;
+  }
+
+  /* ── Table ── */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  thead tr {
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-3);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface-2); }
+
+  td {
+    padding: 14px 16px;
+    vertical-align: middle;
+  }
+
+  .job-id {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-3);
+  }
+
+  .job-type {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent);
+    background: var(--accent-dim);
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+  }
+
+  .badge-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+  }
+
+  .badge.pending { background: var(--yellow-dim); color: var(--yellow); }
+  .badge.pending .badge-dot { background: var(--yellow); }
+  .badge.processing { background: var(--accent-dim); color: var(--accent); animation: processing-pulse 2s infinite; }
+  .badge.processing .badge-dot { background: var(--accent); animation: pulse 1.5s infinite; }
+  .badge.completed { background: var(--green-dim); color: var(--green); }
+  .badge.completed .badge-dot { background: var(--green); }
+  .badge.failed { background: var(--red-dim); color: var(--red); }
+  .badge.failed .badge-dot { background: var(--red); }
+  .badge.cancelled { background: rgba(255,255,255,0.05); color: var(--text-3); }
+  .badge.cancelled .badge-dot { background: var(--text-3); }
+
+  @keyframes processing-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 var(--accent-dim); }
+    50% { box-shadow: 0 0 0 3px var(--accent-dim); }
+  }
+
+  .priority-badge {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+  }
+
+  .priority-1 { background: rgba(255,77,109,0.15); color: var(--red); }
+  .priority-2 { background: rgba(255,209,102,0.15); color: var(--yellow); }
+  .priority-3 { background: rgba(138,155,176,0.1); color: var(--text-2); }
+
+  .retry-count {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-2);
+  }
+
+  .retry-count.has-retries { color: var(--orange); }
+
+  .time-text {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-3);
+  }
+
+  .action-btn {
+    padding: 5px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--font-display);
+    border: 1px solid transparent;
+    margin-right: 4px;
+  }
+
+  .btn-cancel {
+    background: transparent;
+    border-color: rgba(255,77,109,0.3);
+    color: var(--red);
+  }
+
+  .btn-cancel:hover {
+    background: var(--red-dim);
+    border-color: var(--red);
+  }
+
+  .btn-retry {
+    background: transparent;
+    border-color: rgba(0,229,160,0.3);
+    color: var(--green);
+  }
+
+  .btn-retry:hover {
+    background: var(--green-dim);
+    border-color: var(--green);
+  }
+
+  /* ── Create Job Form ── */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .form-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+  }
+
+  .form-card h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .form-card h3 .icon {
+    width: 32px;
+    height: 32px;
+    background: var(--accent-dim);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    font-size: 14px;
+  }
+
+  .form-group {
+    margin-bottom: 18px;
+  }
+
+  .form-group label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 8px;
+    font-family: var(--font-mono);
+  }
+
+  .form-control {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    transition: all 0.2s;
+    outline: none;
+  }
+
+  .form-control:focus {
+    border-color: var(--accent);
+    background: var(--surface-3);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+
+  .form-control::placeholder { color: var(--text-3); }
+
+  select.form-control {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%234a5a6e' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+  }
+
+  textarea.form-control {
+    resize: vertical;
+    min-height: 100px;
+    line-height: 1.6;
+  }
+
+  .submit-btn {
+    width: 100%;
+    padding: 13px;
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: #000;
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.3px;
+    margin-top: 8px;
+  }
+
+  .submit-btn:hover {
+    background: #00eeff;
+    box-shadow: 0 0 24px var(--accent-glow);
+    transform: translateY(-1px);
+  }
+
+  .submit-btn:active { transform: translateY(0); }
+
+  /* ── DLQ View ── */
+  .dlq-card {
+    background: var(--surface);
+    border: 1px solid rgba(255,77,109,0.2);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+
+  .dlq-header {
+    padding: 16px 20px;
+    background: rgba(255,77,109,0.05);
+    border-bottom: 1px solid rgba(255,77,109,0.1);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .dlq-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .dlq-id {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-2);
+  }
+
+  .dlq-body {
+    padding: 16px 20px;
+  }
+
+  .error-block {
+    background: var(--surface-2);
+    border: 1px solid rgba(255,77,109,0.15);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    margin-bottom: 12px;
+  }
+
+  .error-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--red);
+    margin-bottom: 6px;
+    font-family: var(--font-mono);
+  }
+
+  .error-text {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-2);
+    line-height: 1.5;
+  }
+
+  /* ── Toast ── */
+  .toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .toast {
+    padding: 12px 20px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 280px;
+    animation: slideIn 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .toast.success {
+    background: var(--surface-3);
+    border: 1px solid var(--green);
+    color: var(--green);
+  }
+
+  .toast.error {
+    background: var(--surface-3);
+    border: 1px solid var(--red);
+    color: var(--red);
+  }
+
+  .toast.info {
+    background: var(--surface-3);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+  }
+
+  @keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  /* ── SSE Indicator ── */
+  .sse-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-3);
+    padding: 4px 10px;
+    background: var(--surface-2);
+    border-radius: 20px;
+    border: 1px solid var(--border);
+  }
+
+  .sse-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--text-3);
+  }
+
+  .sse-dot.connected {
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  /* ── Empty State ── */
+  .empty-state {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--text-3);
+  }
+
+  .empty-state .icon {
+    font-size: 40px;
+    margin-bottom: 16px;
+    opacity: 0.4;
+  }
+
+  .empty-state p {
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  /* ── Loading ── */
+  .loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    gap: 8px;
+    color: var(--text-3);
+    font-size: 13px;
+    font-family: var(--font-mono);
+  }
+
+  .spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border-2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Benchmark Panel ── */
+  .benchmark-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+
+  .bench-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+
+  .bench-card h4 {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .bench-card.heap h4 { color: var(--accent); }
+  .bench-card.wheel h4 { color: var(--purple); }
+
+  .bench-metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .bench-metric:last-child { border-bottom: none; }
+
+  .bench-metric-label {
+    font-size: 12px;
+    color: var(--text-2);
+    font-family: var(--font-mono);
+  }
+
+  .bench-metric-value {
+    font-size: 14px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+  }
+
+  .bench-card.heap .bench-metric-value { color: var(--accent); }
+  .bench-card.wheel .bench-metric-value { color: var(--purple); }
+
+  .run-bench-btn {
+    padding: 11px 24px;
+    background: var(--surface-3);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .run-bench-btn:hover {
+    border-color: var(--purple);
+    color: var(--purple);
+    background: var(--purple-dim);
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 1024px) {
+    .stats-grid { grid-template-columns: repeat(3, 1fr); }
+    .form-grid { grid-template-columns: 1fr; }
+    .benchmark-grid { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 768px) {
+    .content { padding: 20px 16px; }
+    header { padding: 16px; }
+    .nav-tabs { padding: 12px 16px 0; overflow-x: auto; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    table { font-size: 12px; }
+    td, th { padding: 10px 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <div class="logo-text">Job<span>Scheduler</span></div>
+    </div>
+    <div class="header-right">
+      <div class="sse-badge">
+        <div class="sse-dot" id="sseDot"></div>
+        <span id="sseStatus">SSE</span>
+      </div>
+      <div class="status-badge">
+        <div class="status-dot"></div>
+        LIVE
+      </div>
+      <button class="refresh-btn" onclick="refreshAll()">↺ Refresh</button>
+    </div>
+  </header>
+
+  <!-- Nav Tabs -->
+  <div class="nav-tabs">
+    <div class="tab active" onclick="switchTab('dashboard', this)">Dashboard</div>
+    <div class="tab" onclick="switchTab('jobs', this)">Jobs</div>
+    <div class="tab" onclick="switchTab('create', this)">Create Job</div>
+    <div class="tab" onclick="switchTab('dlq', this)">Dead Letter Queue</div>
+    <div class="tab" onclick="switchTab('benchmark', this)">Benchmark</div>
+  </div>
+
+  <div class="content">
+
+    <!-- Dashboard Panel -->
+    <div class="panel active" id="panel-dashboard">
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card pending">
+          <div class="stat-label">Pending</div>
+          <div class="stat-value" id="stat-pending">—</div>
+        </div>
+        <div class="stat-card processing">
+          <div class="stat-label">Processing</div>
+          <div class="stat-value" id="stat-processing">—</div>
+        </div>
+        <div class="stat-card completed">
+          <div class="stat-label">Completed</div>
+          <div class="stat-value" id="stat-completed">—</div>
+        </div>
+        <div class="stat-card failed">
+          <div class="stat-label">Failed</div>
+          <div class="stat-value" id="stat-failed">—</div>
+        </div>
+        <div class="stat-card cancelled">
+          <div class="stat-label">Cancelled</div>
+          <div class="stat-value" id="stat-cancelled">—</div>
+        </div>
+      </div>
+
+      <div class="section-header">
+        <div class="section-title">Recent Jobs <span class="count" id="recentCount">0</span></div>
+      </div>
+      <div class="table-wrap">
+        <div id="dashboardTable"><div class="loading"><div class="spinner"></div> Loading jobs...</div></div>
+      </div>
+    </div>
+
+    <!-- Jobs Panel -->
+    <div class="panel" id="panel-jobs">
+      <div class="section-header">
+        <div class="section-title">All Jobs <span class="count" id="allJobsCount">0</span></div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <select id="statusFilter" class="form-control" style="width:160px" onchange="filterJobs()">
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="processing">Processing</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <div id="jobsTable"><div class="loading"><div class="spinner"></div> Loading jobs...</div></div>
+      </div>
+    </div>
+
+    <!-- Create Job Panel -->
+    <div class="panel" id="panel-create">
+      <div class="form-grid">
+        <div class="form-card">
+          <h3><div class="icon">+</div> New Job</h3>
+          <div class="form-group">
+            <label>Job Type</label>
+            <select id="jobType" class="form-control">
+              <option value="send_email">send_email</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Priority</label>
+            <select id="jobPriority" class="form-control">
+              <option value="3">3 — Low</option>
+              <option value="2">2 — Medium</option>
+              <option value="1">1 — High</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Scheduled At (optional)</label>
+            <input type="datetime-local" id="jobScheduledAt" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>Recurring Interval (optional)</label>
+            <select id="jobInterval" class="form-control">
+              <option value="">— None (one-time) —</option>
+              <option value="every_1_minute">every_1_minute</option>
+              <option value="every_5_minutes">every_5_minutes</option>
+              <option value="every_1_hour">every_1_hour</option>
+            </select>
+          </div>
+          <button class="submit-btn" onclick="createJob()">Create Job →</button>
+        </div>
+
+        <div class="form-card">
+          <h3><div class="icon">{ }</div> Payload</h3>
+          <div class="form-group">
+            <label>To (email)</label>
+            <input type="email" id="payloadTo" class="form-control" placeholder="recipient@example.com" value="test@example.com">
+          </div>
+          <div class="form-group">
+            <label>Subject</label>
+            <input type="text" id="payloadSubject" class="form-control" placeholder="Email subject" value="Hello from Scheduler">
+          </div>
+          <div class="form-group">
+            <label>Raw Payload Preview</label>
+            <textarea id="payloadPreview" class="form-control" readonly rows="5"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DLQ Panel -->
+    <div class="panel" id="panel-dlq">
+      <div class="section-header">
+        <div class="section-title">Dead Letter Queue <span class="count" id="dlqCount">0</span></div>
+        <div style="font-size:12px;color:var(--text-3);font-family:var(--font-mono);">Threshold: 10 jobs</div>
+      </div>
+      <div id="dlqList"><div class="loading"><div class="spinner"></div> Loading DLQ...</div></div>
+    </div>
+
+    <!-- Benchmark Panel -->
+    <div class="panel" id="panel-benchmark">
+      <div class="section-header">
+        <div class="section-title">Algorithm Benchmark</div>
+        <div style="display:flex;gap:12px;align-items:center;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:12px;color:var(--text-2);">Jobs:</label>
+            <select id="benchJobCount" class="form-control" style="width:120px">
+              <option value="1000">1,000</option>
+              <option value="5000">5,000</option>
+              <option value="10000" selected>10,000</option>
+              <option value="50000">50,000</option>
+            </select>
+          </div>
+          <button class="run-bench-btn" onclick="runBenchmark()">▶ Run Benchmark</button>
+        </div>
+      </div>
+      <div id="benchResults">
+        <div class="benchmark-grid">
+          <div class="bench-card heap">
+            <h4>⬡ Min-Heap</h4>
+            <div class="bench-metric"><span class="bench-metric-label">Insertion</span><span class="bench-metric-value" id="heap-insert">—</span></div>
+            <div class="bench-metric"><span class="bench-metric-label">Extraction</span><span class="bench-metric-value" id="heap-extract">—</span></div>
+            <div class="bench-metric"><span class="bench-metric-label">Ops/sec</span><span class="bench-metric-value" id="heap-ops">—</span></div>
+          </div>
+          <div class="bench-card wheel">
+            <h4>◎ Timing Wheel</h4>
+            <div class="bench-metric"><span class="bench-metric-label">Insertion</span><span class="bench-metric-value" id="wheel-insert">—</span></div>
+            <div class="bench-metric"><span class="bench-metric-label">Extraction</span><span class="bench-metric-value" id="wheel-extract">—</span></div>
+            <div class="bench-metric"><span class="bench-metric-label">Ops/sec</span><span class="bench-metric-value" id="wheel-ops">—</span></div>
+          </div>
+        </div>
+        <div id="benchWinner" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;font-family:var(--font-mono);font-size:13px;color:var(--text-2);line-height:1.8;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+const API = 'https://prestige-scheduler.duckdns.org';
+let allJobs = [];
+let sseSource = null;
+
+// ── Utilities ──────────────────────────────────────
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icons = { success: '✓', error: '✕', info: '↓' };
+  toast.innerHTML = `<span>${icons[type]}</span>${message}`;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3500);
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  return d.toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function truncateId(id) {
+  return id ? id.slice(0, 8) + '...' : '—';
+}
+
+function priorityLabel(p) {
+  const map = { 1: 'HIGH', 2: 'MED', 3: 'LOW' };
+  return `<span class="priority-badge priority-${p}">${map[p] || p}</span>`;
+}
+
+function statusBadge(status) {
+  return `<span class="badge ${status}"><span class="badge-dot"></span>${status}</span>`;
+}
+
+// ── API calls ──────────────────────────────────────
+async function fetchJobs() {
+  const res = await fetch(`${API}/jobs`);
+  if (!res.ok) throw new Error('Failed to fetch jobs');
+  return res.json();
+}
+
+async function fetchDLQ() {
+  const res = await fetch(`${API}/jobs/dlq`);
+  if (!res.ok) throw new Error('Failed to fetch DLQ');
+  return res.json();
+}
+
+// ── Stats ──────────────────────────────────────────
+function updateStats(jobs) {
+  const counts = { pending: 0, processing: 0, completed: 0, failed: 0, cancelled: 0 };
+  jobs.forEach(j => { if (counts[j.status] !== undefined) counts[j.status]++; });
+  Object.entries(counts).forEach(([k, v]) => {
+    const el = document.getElementById(`stat-${k}`);
+    if (el) el.textContent = v;
+  });
+}
+
+// ── Jobs Table ─────────────────────────────────────
+function renderJobsTable(jobs, containerId, showActions = true) {
+  const container = document.getElementById(containerId);
+  if (!jobs.length) {
+    container.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>No jobs found</p></div>`;
+    return;
+  }
+
+  const rows = jobs.map(job => `
+    <tr>
+      <td><span class="job-id" title="${job.id}">${truncateId(job.id)}</span></td>
+      <td><span class="job-type">${job.type}</span></td>
+      <td>${priorityLabel(job.priority)}</td>
+      <td>${statusBadge(job.status)}</td>
+      <td><span class="retry-count ${job.retry_count > 0 ? 'has-retries' : ''}">${job.retry_count}/3</span></td>
+      <td><span class="time-text">${formatDate(job.scheduled_at)}</span></td>
+      <td><span class="time-text">${job.recurring_interval || '—'}</span></td>
+      <td><span class="time-text">${formatDate(job.created_at)}</span></td>
+      ${showActions ? `<td>
+        ${['pending', 'processing'].includes(job.status) ? `<button class="action-btn btn-cancel" onclick="cancelJob('${job.id}')">Cancel</button>` : ''}
+      </td>` : ''}
+    </tr>
+  `).join('');
+
+  container.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th><th>Type</th><th>Priority</th><th>Status</th>
+          <th>Retries</th><th>Scheduled</th><th>Interval</th><th>Created</th>
+          ${showActions ? '<th>Actions</th>' : ''}
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+// ── DLQ ────────────────────────────────────────────
+function renderDLQ(jobs) {
+  const container = document.getElementById('dlqList');
+  document.getElementById('dlqCount').textContent = jobs.length;
+
+  if (!jobs.length) {
+    container.innerHTML = `<div class="empty-state"><div class="icon">✨</div><p>Dead letter queue is empty</p></div>`;
+    return;
+  }
+
+  container.innerHTML = jobs.map(job => `
+    <div class="dlq-card">
+      <div class="dlq-header">
+        <div class="dlq-meta">
+          <span class="job-type">${job.type}</span>
+          <span class="dlq-id">${job.id}</span>
+          ${priorityLabel(job.priority)}
+          <span class="retry-count has-retries">${job.retry_count} retries</span>
+          <span class="time-text">${formatDate(job.updated_at)}</span>
+        </div>
+        <button class="action-btn btn-retry" onclick="retryJob('${job.id}')">↺ Retry</button>
+      </div>
+      <div class="dlq-body">
+        ${job.error_message ? `
+          <div class="error-block">
+            <div class="error-label">Last Error</div>
+            <div class="error-text">${job.error_message}</div>
+          </div>
+        ` : ''}
+        ${job.dlq_reason ? `
+          <div class="error-block">
+            <div class="error-label">DLQ Reason</div>
+            <div class="error-text">${job.dlq_reason}</div>
+          </div>
+        ` : ''}
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-3);">
+          Payload: ${JSON.stringify(job.payload)}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Actions ────────────────────────────────────────
+async function cancelJob(id) {
+  try {
+    const res = await fetch(`${API}/jobs/${id}/cancel`, { method: 'PATCH' });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message);
+    }
+    showToast('Job cancelled successfully', 'success');
+    await refreshAll();
+  } catch (e) {
+    showToast(e.message || 'Failed to cancel job', 'error');
+  }
+}
+
+async function retryJob(id) {
+  try {
+    const res = await fetch(`${API}/jobs/${id}/retry`, { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message);
+    }
+    showToast('Job re-queued for retry', 'success');
+    await refreshAll();
+  } catch (e) {
+    showToast(e.message || 'Failed to retry job', 'error');
+  }
+}
+
+async function createJob() {
+  const type = document.getElementById('jobType').value;
+  const priority = parseInt(document.getElementById('jobPriority').value);
+  const scheduledAt = document.getElementById('jobScheduledAt').value;
+  const interval = document.getElementById('jobInterval').value;
+  const to = document.getElementById('payloadTo').value;
+  const subject = document.getElementById('payloadSubject').value;
+
+  if (!to || !subject) {
+    showToast('Please fill in the email payload fields', 'error');
+    return;
+  }
+
+  const body = {
+    type,
+    payload: { to, subject },
+    priority,
+    ...(scheduledAt ? { scheduled_at: new Date(scheduledAt).toISOString() } : {}),
+    ...(interval ? { recurring_interval: interval } : {}),
+  };
+
+  try {
+    const res = await fetch(`${API}/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || 'Failed to create job');
+    }
+
+    showToast('Job created successfully', 'success');
+    document.getElementById('jobScheduledAt').value = '';
+    document.getElementById('jobInterval').value = '';
+    await refreshAll();
+    switchTab('jobs', document.querySelectorAll('.tab')[1]);
+  } catch (e) {
+    showToast(e.message || 'Failed to create job', 'error');
+  }
+}
+
+// ── Payload Preview ────────────────────────────────
+function updatePayloadPreview() {
+  const to = document.getElementById('payloadTo').value;
+  const subject = document.getElementById('payloadSubject').value;
+  document.getElementById('payloadPreview').value =
+    JSON.stringify({ to, subject }, null, 2);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('payloadTo').addEventListener('input', updatePayloadPreview);
+  document.getElementById('payloadSubject').addEventListener('input', updatePayloadPreview);
+  updatePayloadPreview();
+});
+
+// ── Filter ─────────────────────────────────────────
+function filterJobs() {
+  const filter = document.getElementById('statusFilter').value;
+  const filtered = filter ? allJobs.filter(j => j.status === filter) : allJobs;
+  document.getElementById('allJobsCount').textContent = filtered.length;
+  renderJobsTable(filtered, 'jobsTable');
+}
+
+// ── Benchmark ──────────────────────────────────────
+async function runBenchmark() {
+  const count = document.getElementById('benchJobCount').value;
+  const btn = document.querySelector('.run-bench-btn');
+  btn.textContent = '⏳ Running...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(`${API}/jobs/benchmark?jobs=${count}`);
+    const data = await res.json();
+
+    document.getElementById('heap-insert').textContent = `${data.heap.insertionTimeMs}ms`;
+    document.getElementById('heap-extract').textContent = `${data.heap.extractionTimeMs}ms`;
+    document.getElementById('heap-ops').textContent = data.heap.opsPerSecond.toLocaleString();
+    document.getElementById('wheel-insert').textContent = `${data.timingWheel.insertionTimeMs}ms`;
+    document.getElementById('wheel-extract').textContent = `${data.timingWheel.extractionTimeMs}ms`;
+    document.getElementById('wheel-ops').textContent = data.timingWheel.opsPerSecond.toLocaleString();
+
+    const winner = document.getElementById('benchWinner');
+    winner.style.display = 'block';
+    winner.innerHTML = `<strong style="color:var(--text)">Winner: ${data.winner}</strong><br><br>${data.summary.replace(/\n/g, '<br>')}`;
+
+    showToast(`Benchmark complete — ${data.winner} wins`, 'success');
+  } catch (e) {
+    showToast('Benchmark failed', 'error');
+  } finally {
+    btn.textContent = '▶ Run Benchmark';
+    btn.disabled = false;
+  }
+}
+
+// ── SSE ────────────────────────────────────────────
+function connectSSE() {
+  if (sseSource) sseSource.close();
+
+  try {
+    sseSource = new EventSource(`${API}/jobs/events`);
+
+    sseSource.onopen = () => {
+      document.getElementById('sseDot').classList.add('connected');
+      document.getElementById('sseStatus').textContent = 'LIVE';
+    };
+
+    sseSource.onmessage = async (e) => {
+      try {
+        await refreshAll();
+      } catch (_) {}
+    };
+
+    sseSource.onerror = () => {
+      document.getElementById('sseDot').classList.remove('connected');
+      document.getElementById('sseStatus').textContent = 'SSE';
+      // Fallback to polling every 5s if SSE not available
+      setTimeout(refreshAll, 5000);
+    };
+  } catch (_) {
+    // SSE not available, polling fallback
+    setInterval(refreshAll, 5000);
+  }
+}
+
+// ── Refresh ────────────────────────────────────────
+async function refreshAll() {
+  try {
+    const [jobs, dlq] = await Promise.all([fetchJobs(), fetchDLQ()]);
+    allJobs = jobs;
+
+    updateStats(jobs);
+
+    // Dashboard — show last 10
+    const recent = [...jobs].reverse().slice(0, 10);
+    document.getElementById('recentCount').textContent = recent.length;
+    renderJobsTable(recent, 'dashboardTable');
+
+    // Jobs tab
+    const filter = document.getElementById('statusFilter').value;
+    const filtered = filter ? jobs.filter(j => j.status === filter) : jobs;
+    document.getElementById('allJobsCount').textContent = filtered.length;
+    renderJobsTable(filtered, 'jobsTable');
+
+    // DLQ
+    renderDLQ(dlq);
+  } catch (e) {
+    showToast('Failed to fetch data from server', 'error');
+  }
+}
+
+// ── Tabs ───────────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(`panel-${name}`).classList.add('active');
+}
+
+// ── Init ───────────────────────────────────────────
+refreshAll();
+connectSSE();
+// Polling fallback every 8 seconds regardless
+setInterval(refreshAll, 8000);
+</script>
+</body>
+</html>
