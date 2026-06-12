@@ -46,4 +46,8 @@ export class SchedulerJobAction extends AbstractModelAction<Job> {
       },
     });
   }
+
+  async updatePriority(jobId: string, priority: number): Promise<void> {
+    await this.repository.update(jobId, { priority });
+  }
 }

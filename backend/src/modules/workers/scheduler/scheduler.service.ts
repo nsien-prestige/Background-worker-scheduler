@@ -57,6 +57,9 @@ export class SchedulerService implements OnModuleInit {
       if (waitTime > AGING_THRESHOLD_MS && job.priority > 1) {
         this.heap.remove(job.id);
         job.priority = Math.max(1, job.priority - AGING_BOOST);
+
+        await this.schedulerJobAction.updatePriority(job.id, job.priority);
+        
         this.heap.insert(job);
         this.logger.log(
           `Priority aging applied to job ${job.id} — new priority: ${job.priority}`,
