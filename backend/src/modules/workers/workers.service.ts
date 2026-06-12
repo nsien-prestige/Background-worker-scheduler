@@ -5,6 +5,7 @@ import { Job } from '../jobs/entities/job.entity';
 import { JobStatus } from '../jobs/enums/job-status.enum';
 import { SchedulerService } from './scheduler/scheduler.service';
 import { EmailHandler } from './handlers/email.handler';
+import { RetryService } from './retry.service';
 
 const POLL_INTERVAL_MS = 5000;
 const LOCK_TIMEOUT_MINUTES = 5;
@@ -21,6 +22,7 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
     private readonly jobRepository: Repository<Job>,
     private readonly schedulerService: SchedulerService,
     private readonly emailHandler: EmailHandler,
+    private readonly retryService: RetryService,
   ) {}
 
   onModuleInit(): void {
@@ -61,7 +63,7 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Job ${locked.id} failed: ${message}`);
-      await this.failJob(locked.id, message);
+      await this.retryService.handleFailure(locked, message);
     }
   }
 
@@ -87,15 +89,6 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
     await this.jobRepository.update(id, {
       status: JobStatus.COMPLETED,
       completed_at: new Date(),
-      locked_by: null,
-      locked_at: null,
-    });
-  }
-
-  private async failJob(id: string, errorMessage: string): Promise<void> {
-    await this.jobRepository.update(id, {
-      status: JobStatus.FAILED,
-      error_message: errorMessage,
       locked_by: null,
       locked_at: null,
     });
