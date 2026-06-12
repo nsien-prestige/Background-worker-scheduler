@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, HttpCode, HttpStatus, Patch, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, HttpCode, HttpStatus, Patch, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { JobsService } from './jobs.service';
 import { CreateJobDto } from './dto/create-job.dto';
 
@@ -38,5 +38,11 @@ export class JobsController {
       @Param('dependsOnId', ParseUUIDPipe) dependsOnId: string,
     ) {
       return this.jobsService.addDependency(jobId, dependsOnId);
+    }
+
+  @Get('benchmark')
+    runBenchmark(@Query('jobs') jobCount?: string) {
+      const count = jobCount ? parseInt(jobCount) : 10000;
+      return this.jobsService.runBenchmark(count);
     }
 }
