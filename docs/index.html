@@ -1121,13 +1121,17 @@ async function fetchDLQ(page = 1) {
   return res.json();
 }
 
+async function fetchStats() {
+  const res = await fetch(`${API}/jobs/stats`);
+  if (!res.ok) throw new Error('Failed to fetch job stats');
+  return res.json();
+}
+
 // ── Stats ──────────────────────────────────────────
-function updateStats(jobs) {
-  const counts = { pending: 0, processing: 0, completed: 0, failed: 0, cancelled: 0 };
-  jobs.forEach(j => { if (counts[j.status] !== undefined) counts[j.status]++; });
-  Object.entries(counts).forEach(([k, v]) => {
+function updateStats(stats) {
+  ['pending', 'processing', 'completed', 'failed', 'cancelled'].forEach(k => {
     const el = document.getElementById(`stat-${k}`);
-    if (el) el.textContent = v;
+    if (el) el.textContent = stats[k] ?? 0;
   });
 }
 
@@ -1404,9 +1408,10 @@ async function refreshAll(options = {}) {
       dlqPage = 1;
     }
 
-    const [jobsResult, dlqResult] = await Promise.all([
+    const [jobsResult, dlqResult, stats] = await Promise.all([
       fetchJobs(jobsPage),
       fetchDLQ(dlqPage),
+      fetchStats(),
     ]);
     const jobs = jobsResult.data || [];
     const dlq = dlqResult.data || [];
@@ -1415,7 +1420,7 @@ async function refreshAll(options = {}) {
     dlqMeta = dlqResult.meta;
     allJobs = jobs;
 
-    updateStats(jobs);
+    updateStats(stats);
 
     // Dashboard — show last 10
     const recent = [...jobs].reverse().slice(0, 10);
