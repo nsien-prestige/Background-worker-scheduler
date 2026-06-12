@@ -4,6 +4,7 @@ import { SchedulerService } from './scheduler/scheduler.service';
 import { EmailHandler } from './handlers/email.handler';
 import { RetryService } from './retry.service';
 import { WorkerJobAction } from './actions/worker-job.action';
+import { DagService } from '../jobs/dag.service';
 
 const POLL_INTERVAL_MS = 5000;
 const LOCK_TIMEOUT_MINUTES = 5;
@@ -19,6 +20,7 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
     private readonly schedulerService: SchedulerService,
     private readonly emailHandler: EmailHandler,
     private readonly retryService: RetryService,
+    private readonly dagService: DagService,
   ) {}
 
   onModuleInit(): void {
@@ -47,18 +49,27 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
     const next = this.schedulerService.getNextJob();
     if (!next) return;
 
+    // Check dependencies before locking
+    const depsMet = await this.dagService.areDependenciesMet(next.id);
+    if (!depsMet) {
+        this.logger.log(
+        `Job ${next.id} skipped — dependencies not yet completed`,
+        );
+        return;
+    }
+
     const locked = await this.workerJobAction.lockJob(next.id);
     if (!locked) return;
 
     this.logger.log(`Processing job ${locked.id} type=${locked.type}`);
 
     try {
-      await this.runHandler(locked);
-      await this.completeJob(locked);
+        await this.runHandler(locked);
+        await this.completeJob(locked);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Job ${locked.id} failed: ${message}`);
-      await this.retryService.handleFailure(locked, message);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(`Job ${locked.id} failed: ${message}`);
+        await this.retryService.handleFailure(locked, message);
     }
   }
 
