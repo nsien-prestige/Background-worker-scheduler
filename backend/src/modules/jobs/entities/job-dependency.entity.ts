@@ -5,10 +5,12 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 import { Job } from './job.entity';
 
 @Entity('job_dependencies')
+@Unique(['job_id', 'depends_on_id'])
 export class JobDependency {
   @PrimaryGeneratedColumn('uuid')
   id: string;
