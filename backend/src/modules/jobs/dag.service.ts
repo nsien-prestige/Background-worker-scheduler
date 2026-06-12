@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { DagJobAction } from './actions/dag-job.action';
 
 @Injectable()
@@ -9,6 +9,14 @@ export class DagService {
     if (jobId === dependsOnId) {
       throw new BadRequestException('A job cannot depend on itself');
     }
+
+    const [job, dependsOnJob] = await Promise.all([
+      this.dagJobAction.findJob(jobId),
+      this.dagJobAction.findJob(dependsOnId),
+    ]);
+
+    if (!job) throw new NotFoundException(`Job ${jobId} not found`);
+    if (!dependsOnJob) throw new NotFoundException(`Job ${dependsOnId} not found`);
 
     const wouldCycle = await this.wouldCreateCycle(jobId, dependsOnId);
     if (wouldCycle) {
@@ -24,12 +32,8 @@ export class DagService {
     const deps = await this.dagJobAction.getDependencies(jobId);
     if (deps.length === 0) return true;
 
-    for (const dep of deps) {
-      const completed = await this.dagJobAction.isJobCompleted(dep.depends_on_id);
-      if (!completed) return false;
-    }
-
-    return true;
+    const dependencyIds = deps.map(d => d.depends_on_id);
+    return this.dagJobAction.areAllJobsCompleted(dependencyIds);
   }
 
   private async wouldCreateCycle(
@@ -49,7 +53,7 @@ export class DagService {
 
     visited.add(from);
 
-    const deps = await this.dagJobAction.getDependenciesForJob(from);
+    const deps = await this.dagJobAction.getDependencies(from);
     for (const dep of deps) {
       if (await this.canReach(dep.depends_on_id, target, visited)) {
         return true;
