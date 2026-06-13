@@ -5,7 +5,7 @@ import { env } from '../../../config/env.config';
 export class AlertService {
   private readonly logger = new Logger(AlertService.name);
 
-  async sendDLQAlert(dlqCount: number, threshold: number): Promise<void> {
+  sendDLQAlert(dlqCount: number, threshold: number): void {
     // In production this would use Nodemailer/Resend/SendGrid
     // For this simulation we log it as a critical structured alert
     this.logger.error(
