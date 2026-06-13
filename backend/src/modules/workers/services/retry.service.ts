@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Job } from '../jobs/entities/job.entity';
-import { SchedulerService } from './scheduler/scheduler.service';
-import { RetryJobAction } from './actions/retry-job.action';
+import { Job } from '../../jobs/entities/job.entity';
+import { SchedulerService } from '../scheduler/scheduler.service';
+import { RetryJobAction } from '../actions/retry-job.action';
+import { AlertService } from './alert.service';
 
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
@@ -15,6 +16,7 @@ export class RetryService {
   constructor(
     private readonly retryJobAction: RetryJobAction,
     private readonly schedulerService: SchedulerService,
+    private readonly alertService: AlertService,
   ) {}
 
   calculateDelay(attempt: number): number {
@@ -26,7 +28,7 @@ export class RetryService {
   async handleFailure(job: Job, errorMessage: string): Promise<void> {
     const newRetryCount = job.retry_count + 1;
 
-    if (newRetryCount < MAX_RETRIES) {
+    if (newRetryCount <= MAX_RETRIES) {
       await this.scheduleRetry(job, newRetryCount, errorMessage);
     } else {
       await this.moveToDLQ(job, errorMessage);
@@ -75,6 +77,7 @@ export class RetryService {
       this.logger.error(
         `DLQ ALERT: ${dlqCount} jobs in dead letter queue — exceeds threshold of ${DLQ_THRESHOLD}`,
       );
+      await this.alertService.sendDLQAlert(dlqCount, DLQ_THRESHOLD);
     }
   }
 }

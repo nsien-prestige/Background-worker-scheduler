@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { Job } from '../jobs/entities/job.entity';
 import { SchedulerService } from './scheduler/scheduler.service';
 import { EmailHandler } from './handlers/email.handler';
-import { RetryService } from './retry.service';
+import { RetryService } from './services/retry.service';
 import { WorkerJobAction } from './actions/worker-job.action';
 import { DagService } from '../jobs/dag.service';
 
@@ -55,32 +55,33 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
     // Check dependencies AFTER locking to prevent TOCTOU
     let depsMet: boolean;
     try {
-        depsMet = await this.dagService.areDependenciesMet(locked.id);
+      depsMet = await this.dagService.areDependenciesMet(locked.id);
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        this.logger.error(`Failed to check dependencies for job ${locked.id}: ${message}`);
-        await this.workerJobAction.unlockJob(locked.id);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to check dependencies for job ${locked.id}: ${message}`);
+      await this.workerJobAction.unlockJob(locked.id);
         
-        return;
+      return;
     }
 
     if (!depsMet) {
-        this.logger.log(
+      this.logger.log(
         `Job ${locked.id} skipped — dependencies not yet completed`,
-        );
-        await this.workerJobAction.unlockJob(locked.id);
-        return;
+      );
+      await this.workerJobAction.unlockJob(locked.id);
+      return;
     }
 
+    this.logger.log(`Job started — id=${locked.id} type=${locked.type} worker=${process.pid}`);
     this.logger.log(`Processing job ${locked.id} type=${locked.type}`);
 
     try {
-        await this.runHandler(locked);
-        await this.completeJob(locked);
+      await this.runHandler(locked);
+      await this.completeJob(locked);
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        this.logger.error(`Job ${locked.id} failed: ${message}`);
-        await this.retryService.handleFailure(locked, message);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Job ${locked.id} failed: ${message}`);
+      await this.retryService.handleFailure(locked, message);
     }
   }
 

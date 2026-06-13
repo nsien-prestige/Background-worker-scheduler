@@ -11,4 +11,5 @@ export const env = {
   PORT: parseInt(process.env.PORT || '3000', 10),
   DATABASE_URL: databaseURL,
   DATABASE_LOGGING: process.env.DATABASE_LOGGING === 'true',
+  ALERT_EMAIL: process.env.ALERT_EMAIL || 'admin@scheduler.com',
 };
