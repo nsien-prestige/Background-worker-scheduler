@@ -855,6 +855,50 @@
     background: var(--purple-dim);
   }
 
+  /* ── Expandable Row Detail ── */
+  .detail-row td {
+    padding: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .detail-panel {
+    padding: 16px 20px;
+    background: var(--surface-2);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .detail-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .detail-field-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-3);
+    font-family: var(--font-mono);
+  }
+
+  .detail-field-value {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-2);
+    word-break: break-all;
+  }
+
+  .detail-field-value.error { color: var(--red); }
+  .detail-field-value.highlight { color: var(--accent); }
+
+  tbody tr.expandable { cursor: pointer; }
+  tbody tr.expandable:hover td { background: var(--surface-3); }
+  tbody tr.expanded td { background: var(--surface-3); }
+
   /* ── Responsive ── */
   @media (max-width: 1024px) {
     .stats-grid { grid-template-columns: repeat(3, 1fr); }
@@ -1161,8 +1205,10 @@ function renderJobsTable(jobs, containerId, showActions = true) {
     return;
   }
 
+  const colSpan = showActions ? 9 : 8;
+
   const rows = jobs.map(job => `
-    <tr>
+    <tr class="expandable" onclick="toggleDetail('${containerId}-${job.id}', this)">
       <td><span class="job-id" title="${job.id}">${truncateId(job.id)}</span></td>
       <td><span class="job-type">${job.type}</span></td>
       <td>${priorityLabel(job.priority)}</td>
@@ -1171,9 +1217,61 @@ function renderJobsTable(jobs, containerId, showActions = true) {
       <td><span class="time-text">${formatDate(job.scheduled_at)}</span></td>
       <td><span class="time-text">${job.recurring_interval || '—'}</span></td>
       <td><span class="time-text">${formatDate(job.created_at)}</span></td>
-      ${showActions ? `<td>
+      ${showActions ? `<td onclick="event.stopPropagation()">
         ${['pending', 'processing'].includes(job.status) ? `<button class="action-btn btn-cancel" onclick="cancelJob('${job.id}')">Cancel</button>` : ''}
       </td>` : ''}
+    </tr>
+    <tr class="detail-row" id="detail-${containerId}-${job.id}" style="display:none;">
+      <td colspan="${colSpan}">
+        <div class="detail-panel">
+          <div class="detail-field">
+            <span class="detail-field-label">Full ID</span>
+            <span class="detail-field-value highlight">${job.id}</span>
+          </div>
+          <div class="detail-field">
+            <span class="detail-field-label">Status</span>
+            <span class="detail-field-value">${job.status}</span>
+          </div>
+          <div class="detail-field">
+            <span class="detail-field-label">Priority</span>
+            <span class="detail-field-value">${job.priority === 1 ? '1 — High' : job.priority === 2 ? '2 — Medium' : '3 — Low'}</span>
+          </div>
+          <div class="detail-field">
+            <span class="detail-field-label">Payload</span>
+            <span class="detail-field-value">${JSON.stringify(job.payload)}</span>
+          </div>
+          <div class="detail-field">
+            <span class="detail-field-label">Started At</span>
+            <span class="detail-field-value">${formatDate(job.started_at)}</span>
+          </div>
+          <div class="detail-field">
+            <span class="detail-field-label">Completed At</span>
+            <span class="detail-field-value">${formatDate(job.completed_at)}</span>
+          </div>
+          <div class="detail-field">
+            <span class="detail-field-label">Locked By</span>
+            <span class="detail-field-value">${job.locked_by || '—'}</span>
+          </div>
+          <div class="detail-field">
+            <span class="detail-field-label">Locked At</span>
+            <span class="detail-field-value">${formatDate(job.locked_at)}</span>
+          </div>
+          <div class="detail-field">
+            <span class="detail-field-label">Updated At</span>
+            <span class="detail-field-value">${formatDate(job.updated_at)}</span>
+          </div>
+          ${job.error_message ? `
+          <div class="detail-field" style="grid-column: 1 / -1;">
+            <span class="detail-field-label">Error Message</span>
+            <span class="detail-field-value error">${job.error_message}</span>
+          </div>` : ''}
+          ${job.dlq_reason ? `
+          <div class="detail-field" style="grid-column: 1 / -1;">
+            <span class="detail-field-label">DLQ Reason</span>
+            <span class="detail-field-value error">${job.dlq_reason}</span>
+          </div>` : ''}
+        </div>
+      </td>
     </tr>
   `).join('');
 
@@ -1208,6 +1306,15 @@ function renderPagination(containerId, meta, onPageChange) {
       </div>
     </div>
   `;
+}
+
+function toggleDetail(jobId, row) {
+  const detailRow = document.getElementById(`detail-${jobId}`);
+  if (!detailRow) return;
+
+  const isOpen = detailRow.style.display !== 'none';
+  detailRow.style.display = isOpen ? 'none' : 'table-row';
+  row.classList.toggle('expanded', !isOpen);
 }
 
 function buildPaginationMeta(total, page, limit = PAGE_LIMIT) {
@@ -1451,13 +1558,13 @@ async function refreshAll(options = {}) {
 
     // Dashboard — always fetch latest 10 regardless of current page
     try {
-      const latestRes = await fetchJobs(1, 10);
+      const latestRes = await fetchJobs(1, 15);
       const latest = latestRes.data || [];
       document.getElementById('recentCount').textContent = latest.length;
       renderJobsTable(latest, 'dashboardTable');
     } catch (_) {
       // fallback to current page data if dedicated fetch fails
-      const recent = [...jobs].slice(0, 10);
+      const recent = [...jobs].slice(0, 15);
       document.getElementById('recentCount').textContent = recent.length;
       renderJobsTable(recent, 'dashboardTable');
     }
