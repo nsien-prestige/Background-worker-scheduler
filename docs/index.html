@@ -1449,10 +1449,18 @@ async function refreshAll(options = {}) {
 
     updateStats(stats);
 
-    // Dashboard — show last 10
-    const recent = [...jobs].reverse().slice(0, 10);
-    document.getElementById('recentCount').textContent = recent.length;
-    renderJobsTable(recent, 'dashboardTable');
+    // Dashboard — always fetch latest 10 regardless of current page
+    try {
+      const latestRes = await fetchJobs(1, 10);
+      const latest = latestRes.data || [];
+      document.getElementById('recentCount').textContent = latest.length;
+      renderJobsTable(latest, 'dashboardTable');
+    } catch (_) {
+      // fallback to current page data if dedicated fetch fails
+      const recent = [...jobs].slice(0, 10);
+      document.getElementById('recentCount').textContent = recent.length;
+      renderJobsTable(recent, 'dashboardTable');
+    }
 
     // Jobs tab
     const jobsForTable = filter
