@@ -34,7 +34,14 @@ export class JobsService {
     });
 
     this.schedulerService.addJob(job);
-    this.logger.log(`Job created — id=${job.id} type=${job.type} priority=${job.priority}`);
+    this.logger.log({
+      message: 'Job created',
+      jobId: job.id,
+      type: job.type,
+      priority: job.priority,
+      scheduled_at: job.scheduled_at,
+      recurring_interval: job.recurring_interval,
+    });
 
     return job;
   }
