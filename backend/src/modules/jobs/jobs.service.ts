@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { JobModelAction } from './actions/job.action';
 import { CreateJobDto } from './dto/create-job.dto';
@@ -14,6 +15,7 @@ import { JobStats } from './interfaces/job-stats.interface';
 
 @Injectable()
 export class JobsService {
+  private readonly logger = new Logger(JobsService.name);
   constructor(
     private readonly jobAction: JobModelAction,
     private readonly schedulerService: SchedulerService,
@@ -32,6 +34,8 @@ export class JobsService {
     });
 
     this.schedulerService.addJob(job);
+    this.logger.log(`Job created — id=${job.id} type=${job.type} priority=${job.priority}`);
+
     return job;
   }
 
