@@ -28,7 +28,7 @@ export class RetryService {
   async handleFailure(job: Job, errorMessage: string): Promise<void> {
     const newRetryCount = job.retry_count + 1;
 
-    if (newRetryCount < MAX_RETRIES) {
+    if (newRetryCount <= MAX_RETRIES) {
       await this.scheduleRetry(job, newRetryCount, errorMessage);
     } else {
       await this.moveToDLQ(job, errorMessage);
@@ -77,7 +77,7 @@ export class RetryService {
       this.logger.error(
         `DLQ ALERT: ${dlqCount} jobs in dead letter queue — exceeds threshold of ${DLQ_THRESHOLD}`,
       );
+      await this.alertService.sendDLQAlert(dlqCount, DLQ_THRESHOLD);
     }
-    await this.alertService.sendDLQAlert(dlqCount, DLQ_THRESHOLD);
   }
 }
